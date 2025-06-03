@@ -38,7 +38,14 @@ Embora esteja atualmente em um único arquivo, o código pode ser dividido logic
 
 ---
 
+## Parâmetros
 
+No nosso código, CVM aproximação quadrada 2 X 2 para o Modelo de Hubbard, os parâmetros utilizados foram as seguintes:
+
+
+- t (hopping): unidade de energia, medido em eV, com t = 0.4.
+- U (interação local): unidade de energia, medido em eV, , com U = 3.0.
+- mu (potencial químico): unidade de energia, medido em eV, , com mu = 1.0.
 
 
 ## Contato
