@@ -12,13 +12,13 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from joblib import Parallel, delayed
-import string # Para traço parcial
-import time # <<< --- ADICIONADO IMPORT FALTANTE ---
-from IPython.display import display # Para exibir DataFrame no Colab/Jupyter
+import string 
+import time 
+from IPython.display import display 
 
 # Configuração
 torch.set_default_dtype(torch.float32)
-dispositivo = torch.device("cpu") # Rodar tudo na CPU com joblib
+dispositivo = torch.device("cpu") 
 print(f"INFO: Dispositivo padrão: {dispositivo}")
 print(f"INFO: Dtype padrão: {torch.get_default_dtype()}")
 
@@ -215,9 +215,6 @@ def energia_livre_total_com_penalidade(params, H1, H2, H4, T, λ_12=1000.0, λ_2
     return F_total, E_plaqueta.item(), S_cvm.item(), S1.item(), S2.item(), S4.item(), E1.item(), E2.item()
 
 
-
-
-
 # ============================================================
 # 6. Minimização da Energia Livre Total (LBFGS, CPU)
 # ============================================================
@@ -277,8 +274,6 @@ def minimizar_energia_livre_total_cpu(H1, H2, H4, T,
             "E1": E1,
             "E2": E2
         }
-
-
 
 
 # ============================================================
