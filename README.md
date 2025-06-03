@@ -4,7 +4,7 @@
 
 Este repositório contém o código desenvolvido para a dissertação de mestrado intitulada:
 
-> _"Cluster Variation Methods for Fermions on the Lattice – Mathematical Foundations and Application to the Hubbard Model"_
+> _"Métodos de Variação de Cluster para Férmions na Rede – Fundamentos Matemáticos e Aplicação ao Modelo de Hubbard"_
 
 **Autor**: Lorenzzo V. S. Delmutti  
 **Orientador**: Prof. Dr. Walter Alberto de Siqueira Pedra  
