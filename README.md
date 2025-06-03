@@ -20,7 +20,7 @@ Implementação do **Método de Variação de Clusters (CVM)** aplicado ao **mod
 - Cálculo da energia, entropia de von Neumann e energia livre com fórmula de Möbius.
 - Minimização da energia livre total com penalizações de consistência entre subclusters.
 - Simulações otimizadas para CPU, com paralelização via `joblib`.
-- Geração de tabelas com resultados físicos como \( E \), \( S \), e \( F \) por sítio.
+- Geração de tabelas com resultados físicos como E, S, e F por sítio.
 
 ---
 
@@ -44,8 +44,8 @@ No código, CVM aproximação quadrada 2 X 2 para o Modelo de Hubbard, os parâm
 
 
 - t (hopping): unidade de energia, medido em eV, com t = 0.4.
-- U (interação local): unidade de energia, medido em eV, , com U = 3.0.
-- mu (potencial químico): unidade de energia, medido em eV, , com mu = 1.0.
+- U (interação local): unidade de energia, medido em eV, com U = 3.0.
+- mu (potencial químico): unidade de energia, medido em eV, com mu = 1.0.
 
 
 ## Contato
