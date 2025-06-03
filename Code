@@ -1,0 +1,396 @@
+# ============================================================
+#                  
+#    CVM Plaqueta 2x2, Pares e Pontos aplicado ao Modelo Hubbard
+#         com CPU/Joblib 
+# ============================================================
+
+# ============================================================
+# 1. IMPORTS E CONFIGURAÇÃO GERAL
+# ============================================================
+import torch
+import numpy as np
+import pandas as pd
+from tqdm import tqdm
+from joblib import Parallel, delayed
+import string # Para traço parcial
+import time # <<< --- ADICIONADO IMPORT FALTANTE ---
+from IPython.display import display # Para exibir DataFrame no Colab/Jupyter
+
+# Configuração
+torch.set_default_dtype(torch.float32)
+dispositivo = torch.device("cpu") # Rodar tudo na CPU com joblib
+print(f"INFO: Dispositivo padrão: {dispositivo}")
+print(f"INFO: Dtype padrão: {torch.get_default_dtype()}")
+
+# ============================================================
+# 2. OPERADORES DO MODELO DE HUBBARD (4 estados)
+# ============================================================
+d_local = 4
+I_local = torch.eye(d_local, dtype=torch.float32, device=dispositivo)
+
+operador_n = torch.diag(torch.tensor([0., 1., 1., 2.], device=dispositivo))
+operador_n_up = torch.diag(torch.tensor([0., 1., 0., 1.], device=dispositivo))
+operador_n_dn = torch.diag(torch.tensor([0., 0., 1., 1.], device=dispositivo))
+
+operador_cdag_up = torch.zeros((4, 4), device=dispositivo)
+operador_cdag_up[1, 0] = 1.0
+operador_cdag_up[3, 2] = -1.0
+
+operador_cdag_dn = torch.zeros((4, 4), device=dispositivo)
+operador_cdag_dn[2, 0] = 1.0
+operador_cdag_dn[3, 1] = 1.0
+
+operador_c_up = operador_cdag_up.T.conj().contiguous()
+operador_c_dn = operador_cdag_dn.T.conj().contiguous()
+
+# ============================================================
+# 3. FUNÇÕES AUXILIARES: PARAMETRIZAÇÃO, ENTROPIA, TRAÇO PARCIAL
+# ============================================================
+
+def inicializar_parametros_rho(dim):
+    x = torch.randn(dim, dtype=torch.float32, device=dispositivo)
+    A = torch.randn((dim, dim), dtype=torch.float32, device=dispositivo)
+    return torch.cat([x, A.flatten()])
+
+def parametrizar_rho_espectral(param, dim):
+    """Parametriza uma matriz densidade ρ via decomposição espectral."""
+    x = param[:dim]
+    A = param[dim:].reshape((dim, dim))
+
+    x2 = torch.exp(x)  # softplus-like parametrização
+    p = x2 / torch.sum(x2)
+
+    try:
+        Q, _ = torch.linalg.qr(A + 1e-9 * torch.randn_like(A))
+    except:
+        Q = torch.eye(dim, device=A.device, dtype=A.dtype)
+
+    rho = Q @ torch.diag(p) @ Q.T.conj()
+    rho = (rho + rho.T.conj()) / 2  # garantir hermiticidade
+    return rho
+
+def entropia_von_neumann(rho):
+    try:
+        reg_rho = rho + 1e-18 * torch.eye(rho.shape[0], device=rho.device, dtype=rho.dtype)
+        reg_rho = (reg_rho + reg_rho.T.conj()) / 2
+        vals = torch.linalg.eigvalsh(reg_rho)
+        vals_clean = torch.clamp(vals, min=1e-18)
+        vals_norm = vals_clean / (torch.sum(vals_clean) + 1e-20)
+        log_vals = torch.log(torch.clamp(vals_norm, min=1e-18))
+        entropy = -torch.sum(vals_norm * log_vals)
+        if torch.isnan(entropy) or torch.isinf(entropy):
+             return torch.tensor(0.0, device=rho.device, dtype=rho.dtype)
+        return torch.clamp(entropy, min=0.0)
+    except Exception as e:
+       # print(f"ERRO Entropia: {e}") # Debug opcional
+       return torch.tensor(float('nan'), device=rho.device, dtype=rho.dtype)
+
+def traço_parcial(rho, dims, sites_para_remover):
+    N = len(dims)
+    total_dim = rho.shape[0]
+    expected_dim = int(np.prod(dims))
+    if total_dim != expected_dim or rho.shape[1] != expected_dim:
+         raise ValueError(f"Dimensão de rho ({rho.shape}) não corresponde a dims ({dims})")
+    letras = string.ascii_lowercase
+    if 2 * N > len(letras):
+        raise ValueError("Número de sítios excede o limite de letras para einsum")
+    indices_bra = list(letras[:N])
+    indices_ket = list(letras[N:2*N])
+    indices_finais_bra = [indices_bra[i] for i in range(N) if i not in sites_para_remover]
+    indices_finais_ket = [indices_ket[i] for i in range(N) if i not in sites_para_remover]
+    for i in sites_para_remover:
+        indices_ket[i] = indices_bra[i]
+    eq = f"{''.join(indices_bra)}{''.join(indices_ket)}->{''.join(indices_finais_bra)}{''.join(indices_finais_ket)}"
+    try:
+        rho_cont = rho.contiguous()
+        rho_tensor = rho_cont.reshape(*(dims + dims))
+        rho_traced_tensor = torch.einsum(eq, rho_tensor)
+    except Exception as e:
+        print(f"ERRO einsum/reshape: {e}")
+        raise e
+    dims_finais = [dims[i] for i in range(N) if i not in sites_para_remover]
+    nova_dim = int(np.prod(dims_finais)) if dims_finais else 1
+    if nova_dim > 0:
+        return rho_traced_tensor.reshape((nova_dim, nova_dim)).contiguous()
+    else:
+        return rho_traced_tensor
+
+# ============================================================
+# 4. HAMILTONIANOS H1, H2, H4 
+# ============================================================
+
+def construir_H1(mu, U):
+    return (-mu * operador_n + U * (operador_n_up @ operador_n_dn)).to(dispositivo)
+
+def construir_H2(mu, U, t):
+    n_i = torch.kron(operador_n, I_local)
+    n_j = torch.kron(I_local, operador_n)
+    n_up_i = torch.kron(operador_n_up, I_local)
+    n_dn_i = torch.kron(operador_n_dn, I_local)
+    n_up_j = torch.kron(I_local, operador_n_up)
+    n_dn_j = torch.kron(I_local, operador_n_dn)
+    H_local = -mu * (n_i + n_j) + U * (n_up_i @ n_dn_i + n_up_j @ n_dn_j)
+    hop_up = torch.kron(operador_cdag_up, operador_c_up) + torch.kron(operador_c_up, operador_cdag_up)
+    hop_dn = torch.kron(operador_cdag_dn, operador_c_dn) + torch.kron(operador_c_dn, operador_cdag_dn)
+    return (H_local - t * (hop_up + hop_dn)).to(dispositivo)
+
+def construir_H4(mu, U, t):
+    dim_H4 = d_local**4
+    H_local_total = torch.zeros((dim_H4, dim_H4), device=dispositivo)
+    H_hop_total = torch.zeros((dim_H4, dim_H4), device=dispositivo)
+    def op(site, A):
+        ops = [I_local] * 4
+        ops[site] = A.to(dispositivo)
+        O = ops[0]
+        for i in range(1, 4):
+            O = torch.kron(O, ops[i])
+        return O
+    for i in range(4):
+        H_local_total += -mu * op(i, operador_n) + U * op(i, operador_n_up @ operador_n_dn)
+    vizinhos = [(0,1), (1,2), (2,3), (3,0)]
+    for i, j in vizinhos:
+        H_hop_total += (op(i, operador_cdag_up) @ op(j, operador_c_up) +
+                        op(j, operador_cdag_up) @ op(i, operador_c_up) +
+                        op(i, operador_cdag_dn) @ op(j, operador_c_dn) +
+                        op(j, operador_cdag_dn) @ op(i, operador_c_dn))
+    H4 = H_local_total - t * H_hop_total
+    return ((H4 + H4.T.conj()) / 2).contiguous().to(dispositivo)
+
+
+
+# ============================================================
+# 5. ENERGIA LIVRE TOTAL COM PENALIZAÇÕES DE CONSISTÊNCIA
+# ============================================================
+
+def energia_livre_total_com_penalidade(params, H1, H2, H4, T, λ_12=1000.0, λ_24=1000.0, λ_it=1000.0):
+    """Calcula F_total com penalizações de consistência e simetria de translação interna."""
+    dim1, dim2, dim4 = H1.shape[0], H2.shape[0], H4.shape[0]
+
+    # Separar parâmetros
+    p1 = params[:dim1 + dim1**2]
+    p2 = params[dim1 + dim1**2 : dim1 + dim1**2 + dim2 + dim2**2]
+    p4 = params[dim1 + dim1**2 + dim2 + dim2**2 :]
+
+    # Parametrização das matrizes densidade
+    rho1 = parametrizar_rho_espectral(p1, dim1)
+    rho2 = parametrizar_rho_espectral(p2, dim2)
+    rho4 = parametrizar_rho_espectral(p4, dim4)
+
+    # Consistência entre subclusters
+    rho2_red = traço_parcial(rho2, [4, 4], [1])             # Tr_1(ρ2)
+    rho4_red = traço_parcial(rho4, [4, 4, 4, 4], [2, 3])     # Tr_{2,3}(ρ4)
+
+    # Penalizações de consistência
+    pen_12 = λ_12 * torch.norm(rho1 - rho2_red)**2
+    pen_24 = λ_24 * torch.norm(rho2 - rho4_red)**2
+
+    # Penalizações de translação interna (pares equivalentes por simetria)
+    rho_01 = traço_parcial(rho4, [4, 4, 4, 4], [2, 3])   # sítios (0,1)
+    rho_23 = traço_parcial(rho4, [4, 4, 4, 4], [0, 1])   # sítios (2,3)
+    rho_02 = traço_parcial(rho4, [4, 4, 4, 4], [1, 3])   # sítios (0,2)
+    rho_13 = traço_parcial(rho4, [4, 4, 4, 4], [0, 2])   # sítios (1,3)
+
+    # Penalizações IT (simetria de translação interna)
+    pen_it_1 = torch.norm(rho_01 - rho_23)**2
+    pen_it_2 = torch.norm(rho_02 - rho_13)**2
+    pen_it_total = λ_it * (pen_it_1 + pen_it_2)
+
+    # Entropias
+    S1 = entropia_von_neumann(rho1)
+    S2 = entropia_von_neumann(rho2)
+    S4 = entropia_von_neumann(rho4)
+    S_cvm = S4 - 2 * S2 + S1
+
+    # Energias
+    E_plaqueta = torch.trace(rho4 @ H4) / 4
+    E1 = torch.trace(rho1 @ H1)
+    E2 = torch.trace(rho2 @ H2) / 2
+
+    # Energia livre variacional
+    F = E_plaqueta - T * S_cvm
+
+    # Energia livre total com penalizações
+    F_total = F + pen_12 + pen_24 + pen_it_total
+
+    return F_total, E_plaqueta.item(), S_cvm.item(), S1.item(), S2.item(), S4.item(), E1.item(), E2.item()
+
+
+
+
+
+# ============================================================
+# 6. Minimização da Energia Livre Total (LBFGS, CPU)
+# ============================================================
+
+def minimizar_energia_livre_total_cpu(H1, H2, H4, T,
+                                      λ_12=1000.0,
+                                      λ_24=1000.0,
+                                      λ_it=1000.0,
+                                      max_iter=500):
+    # Dimensões dos clusters
+    dim1 = H1.shape[0]
+    dim2 = H2.shape[0]
+    dim4 = H4.shape[0]
+
+    # Inicialização dos parâmetros variacionais
+    p1 = inicializar_parametros_rho(dim1)
+    p2 = inicializar_parametros_rho(dim2)
+    p4 = inicializar_parametros_rho(dim4)
+    param_total = torch.cat([p1, p2, p4]).clone().detach().requires_grad_()
+
+    # Otimizador LBFGS
+    optimizer = torch.optim.LBFGS([param_total],
+                                  max_iter=max_iter,
+                                  tolerance_grad=1e-8,
+                                  tolerance_change=1e-9,
+                                  line_search_fn="strong_wolfe")
+
+    # Função objetivo (closure)
+    def closure():
+        optimizer.zero_grad()
+        F, *_ = energia_livre_total_com_penalidade(param_total, H1, H2, H4, T, λ_12, λ_24, λ_it)
+        if torch.isnan(F) or torch.isinf(F):
+            raise ValueError("F_total é NaN ou Inf na closure.")
+        F.backward()
+        return F
+
+    # Minimização
+    try:
+        optimizer.step(closure)
+    except Exception as e:
+        print(f"[ERRO] T={T:.3f}: falha na minimização - {e}")
+        return None
+
+    # Resultado final
+    with torch.no_grad():
+        F, E, S, S1, S2, S4, E1, E2 = energia_livre_total_com_penalidade(param_total, H1, H2, H4, T, λ_12, λ_24, λ_it)
+        if any(np.isnan(x) for x in [F, E, S, S1, S2, S4, E1, E2]):
+            return None
+        return {
+            "T (K)": T,
+            "F_total": F.item(),
+            "E_total": E,
+            "S_total": S,
+            "S1": S1,
+            "S2": S2,
+            "S4": S4,
+            "E1": E1,
+            "E2": E2
+        }
+
+
+
+
+# ============================================================
+# 7. CURVA F(T) COM MÉDIA PARALELIZADA (CPU / Joblib)
+# ============================================================
+
+def curva_total_com_media_parallel_cpu(parametros, Tmin=0.01, Tmax=1.0, n_T=10,
+                                       max_iter=500, n_amostras=30,
+                                       λ_12=1000.0, λ_24=1000.0, λ_it=1000.0,
+                                       n_jobs=-1):
+    """ Calcula F_plaqueta(T) via CVM com penalizações, e constrói tabela com F_par, F_ponto, etc. """
+    t, U, mu = parametros["t"], parametros["U"], parametros["mu"]
+    k_B = 8.617333262e-5  # eV/K
+
+    print("INFO: Construindo Hamiltonianos...")
+    H1 = construir_H1(mu, U).cpu()
+    H2 = construir_H2(mu, U, t).cpu()
+    H4 = construir_H4(mu, U, t).cpu()
+    print("INFO: Hamiltonianos construídos.")
+
+    temperaturas_K = np.linspace(Tmin, Tmax, n_T)
+    resultados_finais = []
+
+    for T_K in tqdm(temperaturas_K, desc="F_plaqueta(T) penalizado (CPU)", unit="T"):
+        T_adim = k_B * T_K / t
+
+        resultados_T = Parallel(n_jobs=n_jobs)(
+            delayed(minimizar_energia_livre_total_cpu)(
+                H1, H2, H4, T_adim, λ_12, λ_24, λ_it, max_iter
+            ) for _ in range(n_amostras)
+        )
+
+        resultados_validos = [r for r in resultados_T if r is not None and r["S_total"] > 0]
+
+        if len(resultados_validos) == 0:
+            print(f"[ALERTA] Nenhuma amostra com S_cvm > 0 encontrada para T = {T_K:.4f} K.")
+            resultados_finais.append({
+                "T()": T_adim, "T(K)": T_K,
+                "F_plaqueta": np.nan, "F_par": np.nan, "F_ponto": np.nan,
+                "E_plaqueta": np.nan, "E_par": np.nan, "E_ponto": np.nan,
+                "S_plaqueta": np.nan, "S_par": np.nan, "S_ponto": np.nan
+            })
+            continue
+
+        melhor = min(resultados_validos, key=lambda r: r["F_total"])
+        S1 = melhor["S1"]
+        S2 = melhor["S2"]
+        S4 = melhor["S4"]
+        E1 = melhor["E1"]
+        E2 = melhor["E2"]
+        E4 = melhor["E_total"]
+
+        S_plaqueta = S4 - 2 * S2 + S1
+        S_par = 2 * S2 - 3 * S1
+        S_ponto = S1
+        F_plaqueta = melhor["F_total"]
+        F_par = E2 - T_adim * S_par
+        F_ponto = E1 - T_adim * S1
+        E_par = E2
+        E_ponto = E1
+
+        print(f"\n T = {T_K:.4f} K:")
+        print(f"  E1 = {E_ponto:.6f}")
+        print(f"  E2 = {E_par:.6f}")
+        print(f"  S1 = {S1:.6f}")
+        print(f"  S2 = {S2:.6f}")
+        print(f"  S4 = {S4:.6f}")
+        print(f"  S_par = {S_par:.6f}")
+        print(f"  S_plaqueta = {S_plaqueta:.6f}")
+        print(f"  F_ponto = {F_ponto:.6f}")
+        print(f"  F_par   = {F_par:.6f}")
+        print(f"  F_plaqueta = {F_plaqueta:.6f}")
+
+        resultados_finais.append({
+            "T()": T_adim,
+            "T(K)": T_K,
+            "F_plaqueta": F_plaqueta,
+            "F_par": F_par,
+            "F_ponto": F_ponto,
+            "E_plaqueta": E4,
+            "E_par": E_par,
+            "E_ponto": E_ponto,
+            "S_plaqueta": S_plaqueta,
+            "S_par": S_par,
+            "S_ponto": S_ponto,
+            "S1": S1,
+            "S2": S2,
+            "S4": S4
+        })
+
+    return pd.DataFrame(resultados_finais)
+
+
+
+# ============================================================
+# 8. EXECUÇÃO PRINCIPAL 
+# ============================================================
+
+parametros = {"t": 0.4, "U": 3.0, "mu": 1.0}
+
+tabela_total_1 = curva_total_com_media_parallel_cpu(
+    parametros,
+    Tmin=65.0,
+    Tmax=95.0,
+    n_T=31,
+    max_iter=1000,
+    n_amostras=150,
+    λ_12=1000.0,
+    λ_24=1000.0,
+    λ_it=1000.0,  # Penalização IT agora incluída
+    n_jobs=-1
+)
+
+display(tabela_total_1)
+
