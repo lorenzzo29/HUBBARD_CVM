@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: "Se você utilizar este código, por favor cite como abaixo:"
+title: "Cluster Variation Methods for Fermions on the Lattice – Mathematical Foundations and Application to the Hubbard Model"
+authors:
+  - family-names: Delmutti
+    given-names: Lorenzzo V. S.
+date-released: 2025-06-03
+version: "1.0"
+license: MIT
+doi: ""
+url: "https://github.com/lorenzzo29/HUBBARD_CVM"
+type: software
