@@ -38,10 +38,8 @@ Embora esteja atualmente em um único arquivo, o código pode ser dividido logic
 
 ---
 
-## Requisitos
 
-- Python ≥ 3.9  
-- Bibliotecas:
+
 
 ## Contato
 
@@ -58,7 +56,11 @@ Se este código for útil para sua pesquisa, por favor cite:
 > Delmutti, L. (2025). _Métodos de Variação de Cluster para Férmions na Rede – Fundamentos Matemáticos e Aplicação ao Modelo de Hubbard_. Dissertação de Mestrado, Instituto de Física da Universidade de São Paulo.
 
 
-```bash
-pip install torch numpy matplotlib scipy joblib
+## Requisitos
 
+- Python ≥ 3.9  
+- Instale as bibliotecas necessárias com:
+
+```bash
+pip install torch numpy matplotlib scipy joblib pandas tqdm
 
