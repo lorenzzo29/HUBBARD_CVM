@@ -30,9 +30,9 @@ Embora esteja atualmente em um único arquivo, o código pode ser dividido logic
 
 | Bloco Funcional              | Descrição                                                                 |
 |-----------------------------|---------------------------------------------------------------------------|
-| **Execução principal**       | Gera a curva \( F(T) \) variando a temperatura, com paralelização via Joblib |
-| **Hamiltonianos**            | Construção dos operadores \( H_1 \), \( H_2 \), \( H_4 \) do modelo de Hubbard |
-| **Funções de CVM**           | Parametrização de \(\rho\), entropia de von Neumann, traço parcial, etc. |
+| **Execução principal**       | Gera a curva F(T) variando a temperatura, com paralelização via Joblib |
+| **Hamiltonianos**            | Construção dos operadores H_1, H_2, H_4 do modelo de Hubbard |
+| **Funções de CVM**           | Parametrização de rho, entropia de von Neumann, traço parcial, etc. |
 | **Minimizador**              | Minimização variacional com LBFGS e penalizações de consistência         |
 | **Utilitários**              | Inicialização de parâmetros, verificação de estabilidade, etc.           |
 
