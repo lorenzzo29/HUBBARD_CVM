@@ -83,7 +83,7 @@ Se este código for útil para sua pesquisa, por favor cite:
 
 ## Requisitos
 
-- Python ≥ 3  
+- Python ≥ 3.9  
 - Instale as bibliotecas necessárias com:
 
 ```bash
