@@ -30,7 +30,7 @@ In this work, we adapt the formal structure of the classical CVM to the quantum 
 
 ---
 
-## Descrição
+## Descrição da Simulação Numérica
 
 Implementação do **Método de Variação de Clusters (CVM)** aplicado ao **modelo de Hubbard 2D** com interações de curto alcance. O código realiza:
 
@@ -42,7 +42,7 @@ Implementação do **Método de Variação de Clusters (CVM)** aplicado ao **mod
 
 ---
 
-## Estrutura do Código
+## Estrutura do Código Computacional
 
 Embora esteja atualmente em um único arquivo, o código pode ser dividido logicamente nos seguintes módulos:
 
@@ -56,7 +56,7 @@ Embora esteja atualmente em um único arquivo, o código pode ser dividido logic
 
 ---
 
-## Parâmetros
+## Parâmetros 
 
 No código, CVM aproximação quadrada 2 X 2 para o Modelo de Hubbard, os parâmetros utilizados foram as seguintes:
 
