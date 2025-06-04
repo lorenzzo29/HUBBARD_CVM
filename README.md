@@ -6,6 +6,24 @@ Este repositório contém o código desenvolvido para a dissertação de mestrad
 
 > _"Métodos de Variação de Cluster para Férmions na Rede – Fundamentos Matemáticos e Aplicação ao Modelo de Hubbard"_
 
+Resumo da Dissertação:
+
+Nesta dissertação, desenvolvemos uma abordagem matemática para a mecânica estatística quântica aplicada em modelos com Interações de Curto Alcance, por exemplo, o modelo de Hubbard, em redes bidimensionais, através do uso do Método da Variação de Clusters (CVM), a qual prova a convergência do Método CVM para o caso quântico, estendendo os resultados previamente desenvolvidos para modelos de spins clássicos.
+
+Os modelos de campo médio, como o modelo de Curie-Weiss para sistemas clássicos, fornecem uma primeira aproximação para a descrição de transições de fase ferromagnéticas. No entanto, sua simplicidade decorre da negligência das interações locais e da correlação entre sítios próximos. O CVM oferece uma alternativa mais precisa, incorporando interações locais de forma sistemática.
+
+Nesta pesquisa, adaptamos a abordagem formal do CVM clássico ao contexto quântico, e assim foi possível provar que o CVM é capaz de produzir a pressão e o estado de equilíbrio exatos, à medida que aumentamos o tamanho dos seus clusters, bem como a convergência da energia livre no limite termodinâmico.
+
+
+Abstract:
+
+In this dissertation, we develop a mathematical approach to quantum statistical mechanics applied to models with short-range interactions, such as the Hubbard model, on two-dimensional lattices, through the use of the Cluster Variation Method (CVM). This formulation proves the convergence of the CVM in the quantum case, thus extending previous results originally established for classical spin models.
+
+Mean-field models, such as the Curie-Weiss model for classical systems, provide a first approximation for describing ferromagnetic phase transitions. However, their simplicity arises from neglecting local interactions and correlations between neighboring sites. The CVM offers a more accurate alternative by systematically incorporating local interactions.
+
+In this work, we adapt the formal structure of the classical CVM to the quantum context, and we show that the CVM is capable of producing the exact pressure and equilibrium state as the cluster size increases, as well as ensuring the convergence of the free energy in the thermodynamic limit.
+
+
 **Autor**: Lorenzzo V. S. Delmutti  
 **Orientador**: Prof. Dr. Walter Alberto de Siqueira Pedra  
 **Programa**: Pós-Graduação em Física – Instituto de Física da Universidade de São Paulo (IFUSP)
